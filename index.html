@@ -1,170 +1,90 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live TV</title>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Live TV Player</title>
+  <link href="https://vjs.zencdn.net/8.5.2/video-js.css" rel="stylesheet" />
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #00a7d0;
+      background: #121212;
+      color: white;
       margin: 0;
       padding: 0;
       text-align: center;
     }
-    .header {
-      background-color: #222;
-      padding: 20px;
-      color: white;
-    }
-    .search {
-      margin: 10px auto;
-      max-width: 400px;
-    }
-    input[type="text"] {
-      padding: 10px;
-      width: 100%;
-      border-radius: 10px;
-      border: none;
-    }
-    .channels {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    .channel-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
       gap: 15px;
       padding: 20px;
     }
     .channel {
-      background: white;
+      background: #1e1e1e;
       border-radius: 10px;
-      padding: 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      width: 150px;
       cursor: pointer;
+      transition: 0.3s;
+      padding: 10px;
+    }
+    .channel:hover {
+      background: #333;
     }
     .channel img {
       width: 100%;
-      height: auto;
       border-radius: 10px;
     }
     .channel-name {
-      margin-top: 5px;
-      font-weight: bold;
+      margin-top: 10px;
+      font-size: 14px;
     }
-    #playerContainer {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.9);
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-      flex-direction: column;
-    }
-    #videoPlayer {
-      width: 90%;
-      max-width: 800px;
-      border: 4px solid #00f2ff;
-      border-radius: 10px;
-    }
-    #closeBtn {
-      color: white;
-      margin-top: 15px;
-      font-size: 20px;
-      cursor: pointer;
-      background: red;
-      padding: 10px 20px;
-      border-radius: 5px;
-      border: none;
+    video {
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Live TV Channels</h1>
-    <div class="search">
-      <input type="text" id="searchInput" placeholder="Search channels...">
-    </div>
-  </div>
+  <h1>📺 Live TV</h1>
+  <video id="player" class="video-js vjs-default-skin" controls preload="auto" width="640" height="360"></video>
+  <div class="channel-list" id="channelList">Loading channels...</div>
 
-  <div class="channels" id="channelList"></div>
-
-  <!-- Player Modal -->
-  <div id="playerContainer">
-    <video id="videoPlayer" controls autoplay></video>
-    <button id="closeBtn">Close</button>
-  </div>
-
+  <script src="https://vjs.zencdn.net/8.5.2/video.min.js"></script>
   <script>
-    const m3uUrl = "http://watchindia.net:8880/get.php?username=10155&password=34564&type=m3u&output=mpegts";
+    const xtreamHost = "http://watchindia.net:8880";
+    const username = "10155";
+    const password = "34564";
+    const channelListDiv = document.getElementById("channelList");
+    const player = videojs('player');
 
-    async function fetchM3U() {
-      const response = await fetch(m3uUrl);
-      const text = await response.text();
-      const lines = text.split("\n");
-      const channels = [];
+    async function loadChannels() {
+      try {
+        const res = await fetch(`${xtreamHost}/player_api.php?username=${username}&password=${password}&action=get_live_streams`);
+        const channels = await res.json();
+        channelListDiv.innerHTML = "";
 
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith("#EXTINF")) {
-          const nameMatch = lines[i].match(/,(.*)$/);
-          const logoMatch = lines[i].match(/tvg-logo="(.*?)"/);
-          const name = nameMatch ? nameMatch[1].trim() : "Unnamed";
-          const logo = logoMatch ? logoMatch[1] : "https://via.placeholder.com/150x90?text=No+Logo";
-          const url = lines[i + 1]?.trim();
-          if (url && url.startsWith("http")) {
-            channels.push({ name, logo, url });
-          }
-        }
-      }
-
-      renderChannels(channels);
-    }
-
-    function renderChannels(channelList) {
-      const list = document.getElementById("channelList");
-      list.innerHTML = "";
-      const searchTerm = document.getElementById("searchInput").value.toLowerCase();
-
-      channelList
-        .filter(ch => ch.name.toLowerCase().includes(searchTerm))
-        .forEach(ch => {
+        channels.forEach(channel => {
           const div = document.createElement("div");
           div.className = "channel";
           div.innerHTML = `
-            <img src="${ch.logo}" alt="${ch.name}">
-            <div class="channel-name">${ch.name}</div>
+            <img src="${channel.stream_icon || 'https://via.placeholder.com/150x90?text=No+Logo'}" alt="${channel.name}">
+            <div class="channel-name">${channel.name}</div>
           `;
           div.onclick = () => {
-            playStream(ch.url);
+            const streamUrl = `${xtreamHost}/live/${username}/${password}/${channel.stream_id}.m3u8`;
+            player.src({ type: "application/x-mpegURL", src: streamUrl });
+            player.play();
           };
-          list.appendChild(div);
+          channelListDiv.appendChild(div);
         });
-    }
-
-    function playStream(url) {
-      const video = document.getElementById("videoPlayer");
-      const container = document.getElementById("playerContainer");
-      container.style.display = "flex";
-
-      if (Hls.isSupported()) {
-        const hls = new Hls();
-        hls.loadSource(url);
-        hls.attachMedia(video);
-      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = url;
-      } else {
-        alert("Your browser does not support HLS streaming.");
+      } catch (error) {
+        console.error("Failed to load channels:", error);
+        channelListDiv.textContent = "Failed to load channel list.";
       }
     }
 
-    document.getElementById("closeBtn").onclick = () => {
-      document.getElementById("playerContainer").style.display = "none";
-      const video = document.getElementById("videoPlayer");
-      video.pause();
-      video.src = "";
-    };
-
-    document.getElementById("searchInput").addEventListener("input", fetchM3U);
-    fetchM3U();
+    loadChannels();
   </script>
 </body>
 </html>
